@@ -1,6 +1,6 @@
-# soc-auto-splitter
+# S.T.A.L.K.E.R.: Shadow of Chernobyl AutoSplitter
 
-An auto splitter for XR 3DA.
+An auto splitter for SoC, using Autosplitting runtime.
 
 ## Compilation
 
