@@ -26,11 +26,11 @@ jobs:
 
       - name: Build
         run: |
-          cargo b --release --locked
+          cargo b --release
 
       - name: Release
-        if: github.ref == 'refs/heads/master'
-        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2.2.1
         with:
           files: target/wasm32-wasip1/release/soc_auto_splitter.wasm
           name: Latest
