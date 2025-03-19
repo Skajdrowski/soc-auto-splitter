@@ -63,9 +63,9 @@ async fn main() {
     static mut level: u8 = 0;
     static mut oldLevel: u8 = 0;
 
-    static mut endByte: [u8; 18] = *b"                  ";
+    static mut endByte: [u8; 5] = *b"     ";
     static mut endStr: &str = "";
-    static mut trueEndByte: [u8; 15] = *b"               ";
+    static mut trueEndByte: [u8; 5] = *b"     ";
     static mut trueEndStr: &str = "";
 
     let mut baseAddress = asr::Address::new(0);
@@ -127,18 +127,14 @@ async fn main() {
                 };
                 
                 let lastSplit = || {
-                    endByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.endAddress).unwrap_or(*b"                  ");
+                    endByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.endAddress).unwrap_or(*b"     ");
                     endStr = str::from_utf8(&endByte).unwrap_or("").split('\0').next().unwrap_or("");
                     
-                    trueEndByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.trueEndAddress).unwrap_or(*b"               ");
+                    trueEndByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.trueEndAddress).unwrap_or(*b"     ");
                     trueEndStr = str::from_utf8(&trueEndByte).unwrap_or("").split('\0').next().unwrap_or("");
                     
-                    if endStr == "final_immortal.ogm" && syncFloat == 0.0
-                    || endStr == "final_gold.ogm" && syncFloat == 0.0
-                    || endStr == "final_apocal.ogm" && syncFloat == 0.0
-                    || endStr == "final_blind.ogm" && syncFloat == 0.0
-                    || endStr == "final_to_monolith.ogm" && syncFloat == 0.0
-                    || trueEndStr == "final_peace.ogm" && syncFloat == 0.0 {
+                    if endStr == "final" && syncFloat == 0.0
+                    || trueEndStr == "final" && syncFloat == 0.0 {
                         asr::timer::split();
                     }
                 };
