@@ -80,7 +80,7 @@ async fn main() {
         process.until_closes(async {
             unsafe {
                 if let Ok(moduleSize) = process.get_module_size("XR_3DA.exe") {
-                    if moduleSize == 1662976 || moduleSize == 1613824 {
+                    if moduleSize == 1662976 || moduleSize == 1613824 || moduleSize == 1597440 { //1597440 = ENG Wine/Proton
                         addrStruct = Addr::version0();
                     }
                 }
