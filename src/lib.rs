@@ -21,8 +21,7 @@ struct Addr {
     isPausedAddress: u32,
     syncAddress: u32,
     levelAddress: [u64; 7],
-    endAddress: [u64; 2],
-    trueEndAddress: [u64; 2]
+    endAddress: [u64; 8]
 }
 
 impl Addr {
@@ -33,11 +32,21 @@ impl Addr {
             isPausedAddress: 0x1047C0,
             syncAddress: 0x104928,
             levelAddress: [0xBA040, 0x4, 0x0, 0x40, 0x8, 0x20, 0x14],
-            endAddress: [0x10A878, 0xBC],
-            trueEndAddress: [0x4163C, 0xD30]
+            endAddress: [0x1048BC, 0x54, 0x14, 0x0, 0x0, 0x44, 0xC, 0x12]
         }
     }
-    
+
+    fn version0wine() -> Self {
+        Self {
+            loadAddress: 0xFAC4,
+            noControlAddress: 0x54C2F9,
+            isPausedAddress: 0x1047C0,
+            syncAddress: 0x104928,
+            levelAddress: [0xBA040, 0x4, 0x0, 0x40, 0x8, 0x20, 0x14],
+            endAddress: [0x104858, 0x3C, 0x10, 0x0, 0x0, 0x44, 0xC, 0x12]
+        }
+    }
+
     fn version6() -> Self {
         Self {
             loadAddress: 0x13E84,
@@ -45,8 +54,7 @@ impl Addr {
             isPausedAddress: 0x10BCD0,
             syncAddress: 0x10BE80,
             levelAddress: [0xBF368, 0x4, 0x0, 0x40, 0x8, 0x28, 0x4],
-            endAddress: [0x171DD4, 0x180],
-            trueEndAddress: [0x7D0F8, 0x1CE]
+            endAddress: [0x10BDB0, 0x3C, 0x10, 0x0, 0x0, 0x44, 0xC, 0x12]
         }
     }
 }
@@ -65,8 +73,6 @@ async fn main() {
 
     static mut endByte: [u8; 5] = *b"     ";
     static mut endStr: &str = "";
-    static mut trueEndByte: [u8; 5] = *b"     ";
-    static mut trueEndStr: &str = "";
 
     let mut baseAddress = asr::Address::new(0);
     let mut xrNetServerAddress = asr::Address::new(0);
@@ -80,8 +86,13 @@ async fn main() {
         process.until_closes(async {
             unsafe {
                 if let Ok(moduleSize) = process.get_module_size("XR_3DA.exe") {
-                    if moduleSize == 1662976 || moduleSize == 1613824 || moduleSize == 1597440 { //1597440 = ENG Wine/Proton
-                        addrStruct = Addr::version0();
+                    if moduleSize == 1662976 || moduleSize == 1613824 || moduleSize == 1597440 { //module sizes of patch 1.0000 | 1597440 = ENG Wine/Proton
+                        if *asr::get_os().unwrap() != *"windows" {
+                            addrStruct = Addr::version0wine();
+                        }
+                        else {
+                            addrStruct = Addr::version0();
+                        }
                     }
                 }
 
@@ -120,21 +131,17 @@ async fn main() {
 
                 let levelSplit = || {
                     level = process.read_pointer_path::<u8>(xrCoreAddress, PointerSize::Bit32, &addrStruct.levelAddress).unwrap_or(0);
-                    
+
                     if level != oldLevel && level != 0 && loadByte == 0 {
                         asr::timer::split();
                     }
                 };
-                
+
                 let lastSplit = || {
                     endByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.endAddress).unwrap_or(*b"     ");
                     endStr = str::from_utf8(&endByte).unwrap_or("").split('\0').next().unwrap_or("");
-                    
-                    trueEndByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.trueEndAddress).unwrap_or(*b"     ");
-                    trueEndStr = str::from_utf8(&trueEndByte).unwrap_or("").split('\0').next().unwrap_or("");
-                    
-                    if endStr == "final" && syncFloat == 0.0
-                    || trueEndStr == "final" && syncFloat == 0.0 {
+
+                    if endStr == "final" && syncFloat == 0.0 {
                         asr::timer::split();
                     }
                 };
