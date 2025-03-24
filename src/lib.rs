@@ -141,7 +141,7 @@ async fn main() {
                     endByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.endAddress).unwrap_or(*b"     ");
                     endStr = str::from_utf8(&endByte).unwrap_or("").split('\0').next().unwrap_or("");
 
-                    if endStr == "final" && syncFloat == 0.0 {
+                    if endStr == "final" {
                         asr::timer::split();
                     }
                 };
