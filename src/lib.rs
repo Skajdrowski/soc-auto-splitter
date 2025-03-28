@@ -36,17 +36,6 @@ impl Addr {
         }
     }
 
-    fn version0wine() -> Self {
-        Self {
-            loadAddress: 0xFAC4,
-            noControlAddress: 0x54C2F9,
-            isPausedAddress: 0x1047C0,
-            syncAddress: 0x104928,
-            levelAddress: [0xBA040, 0x4, 0x0, 0x40, 0x8, 0x20, 0x14],
-            endAddress: [0x104858, 0x3C, 0x10, 0x0, 0x0, 0x44, 0xC, 0x12]
-        }
-    }
-
     fn version6() -> Self {
         Self {
             loadAddress: 0x13E84,
@@ -87,12 +76,7 @@ async fn main() {
             unsafe {
                 if let Ok(moduleSize) = process.get_module_size("XR_3DA.exe") {
                     if moduleSize == 1662976 || moduleSize == 1613824 || moduleSize == 1597440 { //module sizes of patch 1.0000 | 1597440 = ENG Wine/Proton
-                        if *asr::get_os().unwrap() != *"windows" {
-                            addrStruct = Addr::version0wine();
-                        }
-                        else {
-                            addrStruct = Addr::version0();
-                        }
+                        addrStruct = Addr::version0();
                     }
                 }
 
