@@ -94,7 +94,7 @@ async fn main() {
                         xrCoreAddress = process.get_module_address("xrCore.dll").unwrap();
                         break;
                     }
-                    sleep(Duration::from_millis(250)).await;
+                    next_tick().await;
                 }
 
                 let start = || {
