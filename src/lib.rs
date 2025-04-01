@@ -3,8 +3,8 @@
 #![allow(non_upper_case_globals)]
 #![allow(static_mut_refs)]
 
-use asr::{future::{sleep}, settings::Gui, Process, PointerSize};
-use core::{str, time::Duration};
+use asr::{future::next_tick, settings::Gui, Process, PointerSize};
+use core::{str};
 
 asr::async_main!(stable);
 asr::panic_handler!();
@@ -13,6 +13,8 @@ asr::panic_handler!();
 struct Settings {
     #[default = true]
     Autosplit_per_level: bool,
+    #[default = false]
+    Slow_PC_mode: bool
 }
 
 struct Addr {
@@ -50,7 +52,10 @@ impl Addr {
 
 async fn main() {
     let mut settings = Settings::register();
-    
+
+    let mut tickToggled = false;
+    asr::set_tick_rate(60.0);
+
     static mut loadByte: u8 = 0;
     static mut oldLoad: u8 = 0;
     static mut syncFloat: f32 = 0.0;
@@ -133,6 +138,15 @@ async fn main() {
                 loop {
                     settings.update();
 
+                    if settings.Slow_PC_mode && !tickToggled {
+                        asr::set_tick_rate(30.0);
+                        tickToggled = true;
+                    }
+                    else if !settings.Slow_PC_mode && tickToggled {
+                        asr::set_tick_rate(60.0);
+                        tickToggled = false;
+                    }
+
                     syncFloat = process.read::<f32>(baseAddress + addrStruct.syncAddress).unwrap_or(1.0);
                     loadByte = process.read::<u8>(xrNetServerAddress + addrStruct.loadAddress).unwrap_or(2);
 
@@ -145,7 +159,7 @@ async fn main() {
 
                     oldLoad = loadByte;
                     oldLevel = level;
-                    sleep(Duration::from_nanos(16666667)).await;
+                    next_tick().await;
                 }
             }
         }).await;

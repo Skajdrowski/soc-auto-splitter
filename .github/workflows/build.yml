@@ -22,7 +22,7 @@ jobs:
         uses: hecrj/setup-rust-action@v2
         with:
           rust-version: stable
-          targets: wasm32-wasip1
+          targets: wasm32-unknown-unknown
 
       - name: Build
         run: |
@@ -32,7 +32,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2.2.1
         with:
-          files: target/wasm32-wasip1/release/soc_auto_splitter.wasm
+          files: target/wasm32-unknown-unknown/release/soc_auto_splitter.wasm
           name: Latest
           tag_name: latest
           body: This contains the latest version of the auto splitter.
@@ -48,7 +48,7 @@ jobs:
         uses: hecrj/setup-rust-action@v2
         with:
           components: clippy
-          targets: wasm32-wasip1
+          targets: wasm32-unknown-unknown
 
       - name: Run Clippy
         run: cargo clippy --all-features
