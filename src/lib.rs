@@ -1,10 +1,24 @@
 #![no_std]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![allow(static_mut_refs)]
+#![warn(
+    clippy::complexity,
+    clippy::correctness,
+    clippy::perf,
+    clippy::style,
+    clippy::undocumented_unsafe_blocks,
+    rust_2018_idioms
+)]
 
-use asr::{future::next_tick, settings::Gui, Process, PointerSize};
-use core::{str};
+use asr::{
+    Address, Process, PointerSize,
+    file_format::pe,
+    future::{next_tick, retry},
+    settings::Gui,
+    string::ArrayCString,
+    timer::{self, TimerState},
+    watcher::Watcher
+};
 
 asr::async_main!(stable);
 asr::panic_handler!();
@@ -17,150 +31,139 @@ struct Settings {
     Slow_PC_mode: bool
 }
 
-struct Addr {
-    loadAddress: u32,
-    noControlAddress: u32,
-    isPausedAddress: u32,
-    syncAddress: u32,
-    levelAddress: [u64; 7],
-    endAddress: [u64; 8]
+#[derive(Default)]
+struct Watchers {
+    loadByte: Watcher<u8>,
+    noControlByte: Watcher<u8>,
+    isPausedByte: Watcher<u8>,
+    syncFloat: Watcher<f32>,
+    levelByte: Watcher<u8>,
+    end: Watcher<ArrayCString<5>>
 }
 
-impl Addr {
-    fn version0() -> Self {
-        Self {
-            loadAddress: 0xFAC4,
-            noControlAddress: 0x54C2F9,
-            isPausedAddress: 0x1047C0,
-            syncAddress: 0x104928,
-            levelAddress: [0xBA040, 0x4, 0x0, 0x40, 0x8, 0x20, 0x14],
-            endAddress: [0x1048BC, 0x54, 0x14, 0x0, 0x0, 0x44, 0xC, 0x12]
-        }
-    }
+struct Memory {
+    load: Address,
+    noControl: Address,
+    isPaused: Address,
+    sync: Address,
+    level: Address,
+    levelPath: [u64; 7],
+    end: Address,
+    endPath: [u64; 8]
+}
 
-    fn version6() -> Self {
-        Self {
-            loadAddress: 0x13E84,
-            noControlAddress: 0x560668,
-            isPausedAddress: 0x10BCD0,
-            syncAddress: 0x10BE80,
-            levelAddress: [0xBF368, 0x4, 0x0, 0x40, 0x8, 0x28, 0x4],
-            endAddress: [0x10BDB0, 0x3C, 0x10, 0x0, 0x0, 0x44, 0xC, 0x12]
+impl Memory {
+    async fn init(process: &Process) -> Self {
+        let baseModule = retry(|| process.get_module_address("XR_3DA.exe")).await;
+        let xrNetServer = retry(|| process.get_module_address("xrNetServer.dll")).await;
+        let xrGame = retry(|| process.get_module_address("xrGame.dll")).await;
+        let xrCore = retry(|| process.get_module_address("xrCore.dll")).await;
+
+        let baseModuleSize = retry(|| pe::read_size_of_image(process, baseModule)).await;
+        //asr::print_message(&format!("{}", baseModuleSize));
+
+        match baseModuleSize {
+            1662976 | 1613824 => Self {
+                load: xrNetServer + 0xFAC4,
+                noControl: xrGame + 0x54C2F9,
+                isPaused: baseModule + 0x1047C0,
+                sync: baseModule + 0x104928,
+                level: xrCore,
+                levelPath: [0xBA040, 0x4, 0x0, 0x40, 0x8, 0x20, 0x14],
+                end: baseModule,
+                endPath: [0x1048BC, 0x54, 0x14, 0x0, 0x0, 0x44, 0xC, 0x12]
+            },
+            _ => Self {
+                load: xrNetServer + 0x13E84,
+                noControl: xrGame + 0x560668,
+                isPaused: baseModule + 0x10BCD0,
+                sync: baseModule + 0x10BE80,
+                level: xrCore,
+                levelPath: [0xBF368, 0x4, 0x0, 0x40, 0x8, 0x28, 0x4],
+                end: baseModule,
+                endPath: [0x10BDB0, 0x3C, 0x10, 0x0, 0x0, 0x44, 0xC, 0x12]
+            }
         }
     }
+}
+
+fn start(watchers: &Watchers) -> bool {
+    watchers.loadByte.pair.is_some_and(|val| val.current == 1 && val.old == 0)
+}
+
+fn isLoading(watchers: &Watchers) -> Option<bool> {
+    Some(
+        watchers.loadByte.pair?.current == 0
+        || (watchers.syncFloat.pair.is_some_and(|val| val.current > 0.09 && val.current < 0.11)
+        || watchers.noControlByte.pair?.current == 1
+        || watchers.isPausedByte.pair?.current == 0
+        && watchers.syncFloat.pair?.current == 0.0
+        )
+    )
+}
+
+fn split(watchers: &Watchers, settings: &Settings) -> bool {
+    match settings.Autosplit_per_level {
+        true => watchers.levelByte.pair.is_some_and(|val| val.changed() && val.current != 0)
+        || watchers.end.pair.is_some_and(|val| val.current.matches("final")),
+        false => watchers.end.pair.is_some_and(|val| val.current.matches("final"))
+    }
+}
+
+fn mainLoop(process: &Process, memory: &Memory, watchers: &mut Watchers) {
+    watchers.loadByte.update_infallible(process.read(memory.load).unwrap_or(1));
+
+    watchers.noControlByte.update_infallible(process.read(memory.noControl).unwrap_or_default());
+    watchers.isPausedByte.update_infallible(process.read(memory.isPaused).unwrap_or_default());
+    watchers.syncFloat.update_infallible(process.read(memory.sync).unwrap_or_default());
+
+    watchers.levelByte.update_infallible(process.read_pointer_path(memory.level, PointerSize::Bit32, &memory.levelPath).unwrap_or_default());
+    watchers.end.update_infallible(process.read_pointer_path(memory.end, PointerSize::Bit32, &memory.endPath).unwrap_or_default());
 }
 
 async fn main() {
     let mut settings = Settings::register();
 
-    let mut tickToggled = false;
     asr::set_tick_rate(60.0);
+    let mut tickToggled = false;
 
-    static mut loadByte: u8 = 0;
-    static mut oldLoad: u8 = 0;
-    static mut syncFloat: f32 = 0.0;
-    let mut noControlByte: u8 = 0;
-    let mut isPausedByte: u8 = 0;
-
-    static mut level: u8 = 0;
-    static mut oldLevel: u8 = 0;
-
-    static mut endByte: [u8; 5] = *b"     ";
-    static mut endStr: &str = "";
-
-    let mut baseAddress = asr::Address::new(0);
-    let mut xrNetServerAddress = asr::Address::new(0);
-    let mut xrGameAddress = asr::Address::new(0);
-    let mut xrCoreAddress = asr::Address::new(0);
-
-    let mut addrStruct = Addr::version6();
     loop {
-        asr::timer::pause_game_time();
         let process = Process::wait_attach("XR_3DA.exe").await;
+
         process.until_closes(async {
-            unsafe {
-                if let Ok(moduleSize) = process.get_module_size("XR_3DA.exe") {
-                    if moduleSize == 1662976 || moduleSize == 1613824 || moduleSize == 1597440 { //module sizes of patch 1.0000 | 1597440 = ENG Wine/Proton
-                        addrStruct = Addr::version0();
+            let mut watchers = Watchers::default();
+            let memory = Memory::init(&process).await;
+
+            loop {
+                settings.update();
+
+                if settings.Slow_PC_mode && !tickToggled {
+                    asr::set_tick_rate(30.0);
+                    tickToggled = true;
+                }
+                else if !settings.Slow_PC_mode && tickToggled {
+                    asr::set_tick_rate(60.0);
+                    tickToggled = false;
+                }
+
+                if [TimerState::Running, TimerState::Paused].contains(&timer::state()) {
+                    match isLoading(&watchers) {
+                        Some(true) => timer::pause_game_time(),
+                        Some(false) => timer::resume_game_time(),
+                        _ => ()
+                    }
+
+                    if split(&watchers, &settings) {
+                        timer::split();
                     }
                 }
 
-                baseAddress = process.get_module_address("XR_3DA.exe").unwrap();
-                loop {
-                    syncFloat = process.read::<f32>(baseAddress + addrStruct.syncAddress).unwrap();
-                    if syncFloat != 0.0 {
-                        xrNetServerAddress = process.get_module_address("xrNetServer.dll").unwrap();
-                        xrGameAddress = process.get_module_address("xrGame.dll").unwrap();
-                        xrCoreAddress = process.get_module_address("xrCore.dll").unwrap();
-                        break;
-                    }
-                    next_tick().await;
+                if timer::state().eq(&TimerState::NotRunning) && start(&watchers) {
+                    timer::start();
                 }
 
-                let start = || {
-                    if loadByte == 1 && oldLoad == 0 {
-                        asr::timer::start();
-                    }
-                };
-
-                let mut isLoading = || {
-                    noControlByte = process.read::<u8>(xrGameAddress + addrStruct.noControlAddress).unwrap_or(2);
-                    isPausedByte = process.read::<u8>(baseAddress + addrStruct.isPausedAddress).unwrap_or(2);
-
-                    if loadByte == 0
-                    || (syncFloat > 0.09 && syncFloat < 0.11)
-                    || noControlByte == 1
-                    || isPausedByte == 0 && syncFloat == 0.0 {
-                        asr::timer::pause_game_time();
-                    }
-                    else {
-                        asr::timer::resume_game_time();
-                    }
-                };
-
-                let levelSplit = || {
-                    level = process.read_pointer_path::<u8>(xrCoreAddress, PointerSize::Bit32, &addrStruct.levelAddress).unwrap_or(0);
-
-                    if level != oldLevel && level != 0 && loadByte == 0 {
-                        asr::timer::split();
-                    }
-                };
-
-                let lastSplit = || {
-                    endByte = process.read_pointer_path(baseAddress, PointerSize::Bit32, &addrStruct.endAddress).unwrap_or(*b"     ");
-                    endStr = str::from_utf8(&endByte).unwrap_or("").split('\0').next().unwrap_or("");
-
-                    if endStr == "final" {
-                        asr::timer::split();
-                    }
-                };
-
-                loop {
-                    settings.update();
-
-                    if settings.Slow_PC_mode && !tickToggled {
-                        asr::set_tick_rate(30.0);
-                        tickToggled = true;
-                    }
-                    else if !settings.Slow_PC_mode && tickToggled {
-                        asr::set_tick_rate(60.0);
-                        tickToggled = false;
-                    }
-
-                    syncFloat = process.read::<f32>(baseAddress + addrStruct.syncAddress).unwrap_or(1.0);
-                    loadByte = process.read::<u8>(xrNetServerAddress + addrStruct.loadAddress).unwrap_or(2);
-
-                    start();
-                    isLoading();
-                    if settings.Autosplit_per_level {
-                        levelSplit();
-                    }
-                    lastSplit();
-
-                    oldLoad = loadByte;
-                    oldLevel = level;
-                    next_tick().await;
-                }
+                mainLoop(&process, &memory, &mut watchers);
+                next_tick().await;
             }
         }).await;
     }
