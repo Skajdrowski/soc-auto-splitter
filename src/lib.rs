@@ -63,7 +63,7 @@ impl Memory {
         //asr::print_message(&format!("{}", baseModuleSize));
 
         match baseModuleSize {
-            1662976 | 1613824 => Self {
+            1662976 | 1613824 | 1597440 => Self {
                 load: xrNetServer + 0xFAC4,
                 noControl: xrGame + 0x54C2F9,
                 isPaused: baseModule + 0x1047C0,
