@@ -60,7 +60,7 @@ impl Memory {
         let xrCore = retry(|| process.get_module_address("xrCore.dll")).await;
 
         let baseModuleSize = retry(|| pe::read_size_of_image(process, baseModule)).await;
-        //asr::print_message(&format!("{}", baseModuleSize));
+        //asr::print_limited::<128>(&format_args!("{}", baseModule));
 
         match baseModuleSize {
             1662976 | 1613824 | 1597440 => Self {
