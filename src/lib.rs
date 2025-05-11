@@ -11,7 +11,7 @@
 )]
 
 use asr::{
-    Address, Process, PointerSize,
+    Address, Process, PointerSize, deep_pointer::DeepPointer,
     file_format::pe,
     future::{next_tick, retry},
     settings::Gui,
@@ -42,14 +42,12 @@ struct Watchers {
 }
 
 struct Memory {
-    baseModule: Address,
-    xrCore: Address,
     load: Address,
     noControl: Address,
     isPaused: Address,
     sync: Address,
-    level: [u64; 7],
-    end: [u64; 8]
+    level: DeepPointer<7>,
+    end: DeepPointer<8>
 }
 
 impl Memory {
@@ -64,24 +62,20 @@ impl Memory {
 
         match baseModuleSize {
             1662976 | 1613824 | 1597440 => Self {
-                baseModule,
-                xrCore,
                 load: xrNetServer + 0xFAC4,
                 noControl: xrGame + 0x54C2F9,
                 isPaused: baseModule + 0x1047C0,
                 sync: baseModule + 0x104928,
-                level: [0xBA040, 0x4, 0x0, 0x40, 0x8, 0x20, 0x14],
-                end: [0x1048BC, 0x54, 0x14, 0x0, 0x0, 0x44, 0xC, 0x12]
+                level: DeepPointer::new(xrCore, PointerSize::Bit32, &[0xBA040, 0x4, 0x0, 0x40, 0x8, 0x20, 0x14]),
+                end: DeepPointer::new(baseModule, PointerSize::Bit32, &[0x1048BC, 0x54, 0x14, 0x0, 0x0, 0x44, 0xC, 0x12])
             },
             _ => Self {
-                baseModule,
-                xrCore,
                 load: xrNetServer + 0x13E84,
                 noControl: xrGame + 0x560668,
                 isPaused: baseModule + 0x10BCD0,
                 sync: baseModule + 0x10BE80,
-                level: [0xBF368, 0x4, 0x0, 0x40, 0x8, 0x28, 0x4],
-                end: [0x10BDB0, 0x3C, 0x10, 0x0, 0x0, 0x44, 0xC, 0x12]
+                level: DeepPointer::new(xrCore, PointerSize::Bit32, &[0xBF368, 0x4, 0x0, 0x40, 0x8, 0x28, 0x4]),
+                end: DeepPointer::new(baseModule, PointerSize::Bit32, &[0x10BDB0, 0x3C, 0x10, 0x0, 0x0, 0x44, 0xC, 0x12])
             }
         }
     }
@@ -117,8 +111,8 @@ fn mainLoop(process: &Process, memory: &Memory, watchers: &mut Watchers) {
     watchers.isPausedByte.update_infallible(process.read(memory.isPaused).unwrap_or_default());
     watchers.syncFloat.update_infallible(process.read(memory.sync).unwrap_or_default());
 
-    watchers.levelByte.update_infallible(process.read_pointer_path(memory.xrCore, PointerSize::Bit32, &memory.level).unwrap_or_default());
-    watchers.end.update_infallible(process.read_pointer_path(memory.baseModule, PointerSize::Bit32, &memory.end).unwrap_or_default());
+    watchers.levelByte.update_infallible(memory.level.deref(process).unwrap_or_default());
+    watchers.end.update_infallible(memory.end.deref(process).unwrap_or_default());
 }
 
 async fn main() {
