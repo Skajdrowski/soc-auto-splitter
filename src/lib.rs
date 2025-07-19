@@ -88,18 +88,23 @@ fn start(watchers: &Watchers) -> bool {
 fn isLoading(watchers: &Watchers) -> Option<bool> {
     Some(
         watchers.loadByte.pair?.current == 0
-        || (watchers.syncFloat.pair.is_some_and(|val| val.current > 0.09 && val.current < 0.11)
+        || watchers.syncFloat.pair.is_some_and(|val| val.current > 0.09 && val.current < 0.11)
         || watchers.noControlByte.pair?.current == 1
         || watchers.isPausedByte.pair?.current == 0
         && watchers.syncFloat.pair?.current == 0.0
-        )
     )
 }
 
 fn split(watchers: &Watchers, settings: &Settings) -> bool {
     match settings.Autosplit_per_level {
-        true => watchers.levelByte.pair.is_some_and(|val| val.changed() && val.old != 0 && val.current != 0)
-        || watchers.end.pair.unwrap().current.matches("final"),
+        true => {
+            let levelByte = watchers.levelByte.pair.unwrap();
+
+            levelByte.changed()
+            && levelByte.old != 0
+            && levelByte.current != 0
+            || watchers.end.pair.unwrap().current.matches("final")
+        },
         false => watchers.end.pair.unwrap().current.matches("final")
     }
 }
