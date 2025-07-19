@@ -82,7 +82,7 @@ impl Memory {
 }
 
 fn start(watchers: &Watchers) -> bool {
-    watchers.loadByte.pair.is_some_and(|val| val.current == 1 && val.old == 0)
+    watchers.loadByte.pair.unwrap().changed_from_to(&0, &1)
 }
 
 fn isLoading(watchers: &Watchers) -> Option<bool> {
@@ -98,9 +98,9 @@ fn isLoading(watchers: &Watchers) -> Option<bool> {
 
 fn split(watchers: &Watchers, settings: &Settings) -> bool {
     match settings.Autosplit_per_level {
-        true => watchers.levelByte.pair.is_some_and(|val| val.changed() && val.current != 0)
-        || watchers.end.pair.is_some_and(|val| val.current.matches("final")),
-        false => watchers.end.pair.is_some_and(|val| val.current.matches("final"))
+        true => watchers.levelByte.pair.is_some_and(|val| val.changed() && val.old != 0 && val.current != 0)
+        || watchers.end.pair.unwrap().current.matches("final"),
+        false => watchers.end.pair.unwrap().current.matches("final")
     }
 }
 
@@ -140,6 +140,8 @@ async fn main() {
                     tickToggled = false;
                 }
 
+                mainLoop(&process, &memory, &mut watchers);
+
                 if [TimerState::Running, TimerState::Paused].contains(&timer::state()) {
                     match isLoading(&watchers) {
                         Some(true) => timer::pause_game_time(),
@@ -156,7 +158,6 @@ async fn main() {
                     timer::start();
                 }
 
-                mainLoop(&process, &memory, &mut watchers);
                 next_tick().await;
             }
         }).await;
