@@ -86,12 +86,13 @@ fn start(watchers: &Watchers) -> bool {
 }
 
 fn isLoading(watchers: &Watchers) -> Option<bool> {
+    let syncFloat = watchers.syncFloat.pair.unwrap();
+    
     Some(
-        watchers.loadByte.pair?.current == 0
-        || watchers.syncFloat.pair.is_some_and(|val| val.current > 0.09 && val.current < 0.11)
-        || watchers.noControlByte.pair?.current == 1
-        || watchers.isPausedByte.pair?.current == 0
-        && watchers.syncFloat.pair?.current == 0.0
+        watchers.loadByte.pair.unwrap().current == 0
+        || watchers.isPausedByte.pair.unwrap().current == 0
+        && syncFloat.current == 0.0 || syncFloat.current >= 0.057 && syncFloat.current <= 0.11
+        || watchers.noControlByte.pair.unwrap().current == 1
     )
 }
 
@@ -112,11 +113,11 @@ fn split(watchers: &Watchers, settings: &Settings) -> bool {
 fn mainLoop(process: &Process, memory: &Memory, watchers: &mut Watchers) {
     watchers.loadByte.update_infallible(process.read(memory.load).unwrap_or(1));
 
-    watchers.noControlByte.update_infallible(process.read(memory.noControl).unwrap_or_default());
-    watchers.isPausedByte.update_infallible(process.read(memory.isPaused).unwrap_or_default());
-    watchers.syncFloat.update_infallible(process.read(memory.sync).unwrap_or_default());
+    watchers.noControlByte.update_infallible(process.read(memory.noControl).unwrap_or(0));
+    watchers.isPausedByte.update_infallible(process.read(memory.isPaused).unwrap_or(0));
+    watchers.syncFloat.update_infallible(process.read(memory.sync).unwrap_or(1337.69));
 
-    watchers.levelByte.update_infallible(memory.level.deref(process).unwrap_or_default());
+    watchers.levelByte.update_infallible(memory.level.deref(process).unwrap_or(0));
     watchers.end.update_infallible(memory.end.deref(process).unwrap_or_default());
 }
 
@@ -161,6 +162,7 @@ async fn main() {
 
                 if timer::state().eq(&TimerState::NotRunning) && start(&watchers) {
                     timer::start();
+                    timer::pause_game_time();
                 }
 
                 next_tick().await;
