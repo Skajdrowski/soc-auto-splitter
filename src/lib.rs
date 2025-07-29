@@ -161,8 +161,8 @@ async fn main() {
                 }
 
                 if timer::state().eq(&TimerState::NotRunning) && start(&watchers) {
-                    timer::start();
                     timer::pause_game_time();
+                    timer::start();
                 }
 
                 next_tick().await;
