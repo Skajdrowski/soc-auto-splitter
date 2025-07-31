@@ -1,6 +1,6 @@
 # S.T.A.L.K.E.R.: Shadow of Chernobyl AutoSplitter
 
-An auto splitter for SoC, using Autosplitting runtime.
+An auto splitter for SoC, using ASR (AutoSplitting Runtime), to work with LiveSplit One
 
 ## Compilation
 
